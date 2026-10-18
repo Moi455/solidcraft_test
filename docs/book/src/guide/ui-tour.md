@@ -32,6 +32,14 @@
   in the default and Inventor presets. In every preset, Ctrl+left drag (Cmd on macOS) that starts
   on empty space orbits; a Ctrl+click still adds to the selection. Shift+right-drag snaps to the nearest standard or
   diagonal view; Shift does not request snapping when the preset already requires it to orbit.
+  **Mouse gestures** (Preferences › Navigation, off by default) work with the SolidWorks mouse preset
+  only (the wheel orbits, Ctrl + wheel pans) and take over the right button, which then no longer
+  orbits: press it and drag to open a ring of tools (280 pt inside, 350 pt outside) and touch a tool's
+  zone to take it; a right click without a drag still opens the context menu. Each studio has its own
+  tools, and **Customize…** sets how many tools a studio's ring holds and in which place. Zones
+  alternate between two tints, three when the number of tools is odd. The optional radial context
+  menu is a separate setting.
+
   With **Touchpad** selected in Preferences › Navigation, hold **Shift** and move the pointer to
   pan, or hold **Alt** (**Option** on macOS) and move it to orbit—no mouse button is needed.
   Vertical two-finger scrolling zooms in this preset, regardless of the saved two-finger pan

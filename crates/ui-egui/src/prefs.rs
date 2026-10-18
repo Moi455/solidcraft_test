@@ -266,6 +266,8 @@ pub struct Prefs {
     pub navigator_style: NavigatorStyle,
     /// Show the radial ring and enable hold/flick gestures for viewport context menus.
     pub radial_context_menu: bool,
+    /// Mouse gestures: a ring of tools on the right button (SolidWorks mouse mode only).
+    pub mouse_gestures: crate::mouse_gesture::Config,
     /// The wheel zooms out when turned forward.
     pub zoom_reverse: bool,
     /// What an orbit turns around.
@@ -428,6 +430,7 @@ impl Default for Prefs {
             nav: "fusion".into(),
             navigator_style: NavigatorStyle::default(),
             radial_context_menu: false,
+            mouse_gestures: Default::default(),
             zoom_reverse: false,
             orbit_around: OrbitAround::default(),
             orbit_cursor: false,
@@ -738,6 +741,7 @@ fn defaults(app: &mut SolveApp, page: usize) {
             p.nav = d.nav;
             p.navigator_style = d.navigator_style;
             p.radial_context_menu = d.radial_context_menu;
+            p.mouse_gestures = d.mouse_gestures;
             p.zoom_reverse = d.zoom_reverse;
             p.zoom_to_cursor = d.zoom_to_cursor;
             p.smooth_wheel_zoom = d.smooth_wheel_zoom;
@@ -853,6 +857,10 @@ pub fn set_autosave(app: &mut SolveApp) {
 
 /// Which navigation dragging `button` with `mods` held does under the preset.
 pub fn nav_mode(app: &SolveApp, button: NavButton, mods: Modifiers) -> Option<NavMode> {
+    // With mouse gestures on, the right button opens the ring of tools instead of orbiting.
+    if button == NavButton::Right && crate::mouse_gesture::active(app) {
+        return None;
+    }
     nav_preset(&app.preferences.nav).mode(button, mods)
 }
 
@@ -1268,6 +1276,7 @@ fn page(app: &mut SolveApp, ui: &mut egui::Ui, t: &Tokens) {
             ui.label(crate::i18n::tr_label("Context menu"));
             ui.checkbox(&mut app.preferences.radial_context_menu, crate::i18n::tr_label("Radial context menu"));
             ui.end_row();
+            crate::mouse_gesture::nav_rows(app, ui, t);
             ui.label(crate::i18n::tr_label("View navigator"));
             let picker =
                 egui::ComboBox::from_id_salt("pref_navigator_style").selected_text(crate::i18n::tr_label(app.preferences.navigator_style.label())).show_ui(ui, |ui| {

@@ -2570,7 +2570,8 @@ pub fn show(app: &mut SolveApp, ui: &mut egui::Ui) {
                 .collect();
             let _ = app.run("select.set", json!({ "items": items, "add": add }));
         }
-        if resp.secondary_clicked() && delta == egui::Vec2::ZERO {
+        // With mouse gestures on, the right button belongs to the ring of tools.
+        if resp.secondary_clicked() && delta == egui::Vec2::ZERO && !crate::mouse_gesture::active(app) {
             if app.tool.is_some() {
                 crate::tools::finish(app);
             } else if app.dialog.is_none() {

@@ -1538,7 +1538,7 @@ fn slot_rect(c: Pos2, k: usize, size: Vec2) -> Rect {
 /// Press-and-hold of the right button in the viewport opens the menu; releasing over a
 /// direction picks it.
 fn track_hold(app: &mut SolveApp, ctx: &egui::Context) {
-    if !app.preferences.radial_context_menu {
+    if !app.preferences.radial_context_menu || crate::mouse_gesture::active(app) {
         app.menu.press = None;
         app.menu.flick = false;
         app.menu.radial = false;

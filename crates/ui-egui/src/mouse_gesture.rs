@@ -1,11 +1,13 @@
-//! Mouse gestures: a ring of tools that opens under the pointer the moment the right button is
-//! pressed, a different set in each studio, taken by touching a tool's zone.
+//! Mouse gestures: a ring of tools that opens under the pointer when the right button is held and
+//! the pointer moves [`OPEN_DRAG`] points, a different set in each studio, taken by touching a
+//! tool's zone.
 //!
-//! Gestures work with the SolidWorks mouse mode only (the wheel orbits, Ctrl + wheel pans) and
-//! take the right button over: while they are on, the right button no longer orbits the view
-//! (`prefs::nav_mode`), the right-click context menu and the radial menu are off (the viewport and
-//! `context_menu::track_hold` ask [`active`]), and the ring opens even while a tool is in
-//! progress. Only while gestures are active: with them off nothing changes.
+//! Gestures work with the SolidWorks mouse mode only (the wheel orbits, Ctrl + wheel pans). While
+//! they are on, the right button no longer orbits the view (`prefs::nav_mode`) and the optional
+//! radial menu is off (`context_menu::track_hold` asks [`active`]). A right-click that does not
+//! move still opens the usual context menu (or finishes the tool in progress); one that moves
+//! far enough opens the ring instead, even while a tool is in progress, and the click that ends
+//! it opens no menu ([`took_press`]). With gestures off nothing changes.
 //!
 //! The ring is 280 points across inside and 350 outside. Every tool has a zone, and only tools
 //! have zones: five tools make five equal parts of the circle. Zones alternate between two tints,
@@ -293,6 +295,10 @@ fn palette(t: &Tokens) -> [Color32; 3] {
     [t.panel, t.panel.lerp_to_gamma(t.text, 0.30), t.panel.lerp_to_gamma(t.text, 0.55)]
 }
 
+/// How far (points) the pointer moves with the right button held before the ring opens; a press
+/// that stays inside this is a right-click.
+pub(crate) const OPEN_DRAG: f32 = 4.0;
+
 /// Where a ring opened by a press at `at` is centred: there, or as near as keeps it on screen.
 fn centre_for(at: Pos2, screen: Rect) -> Pos2 {
     let m = RING + 6.0;
@@ -383,6 +389,10 @@ fn zone(painter: &Painter, c: Pos2, inner: f32, outer: f32, a0: f32, a1: f32, fi
 pub struct State {
     /// The ring that is open.
     wheel: Option<Wheel>,
+    /// Where the right button went down, until the pointer has moved [`OPEN_DRAG`] from it.
+    press: Option<Pos2>,
+    /// The right button that is down (or was last) opened a ring: its release is no click.
+    used: bool,
     /// The customization window.
     pub(crate) editor: Editor,
 }
@@ -404,6 +414,11 @@ pub fn show(app: &mut SolveApp, ctx: &egui::Context) {
     editor(app, ctx);
 }
 
+/// The right button last pressed opened the ring, so letting go of it is not a right-click.
+pub(crate) fn took_press(app: &SolveApp) -> bool {
+    app.gesture.used
+}
+
 /// Whether a ring is open.
 #[cfg(test)]
 pub(crate) fn is_open(app: &SolveApp) -> bool {
@@ -413,6 +428,8 @@ pub(crate) fn is_open(app: &SolveApp) -> bool {
 fn track(app: &mut SolveApp, ctx: &egui::Context) {
     if !active(app) {
         app.gesture.wheel = None;
+        app.gesture.press = None;
+        app.gesture.used = false;
         return;
     }
     let (pressed, down, pos, esc) = ctx.input(|i| {
@@ -426,16 +443,26 @@ fn track(app: &mut SolveApp, ctx: &egui::Context) {
     // Letting go, or Esc, leaves nothing half-way.
     if !down || esc {
         app.gesture.wheel = None;
+        app.gesture.press = None;
         return;
     }
     let Some(pos) = pos else { return };
-    // The ring opens on the press itself, whatever the pointer carries (a tool or a dialog in
-    // progress included): there is no right-click menu to wait for while gestures are on.
-    if pressed && app.gesture.wheel.is_none() && app.viewport.mouse.is_some() {
+    // A press in the viewport waits to see whether it is a click or the start of a gesture.
+    if pressed {
+        app.gesture.used = false;
+        app.gesture.press = (app.gesture.wheel.is_none() && app.viewport.mouse.is_some()).then_some(pos);
+    }
+    // Held and moved far enough: the ring opens where the button went down, whatever the pointer
+    // carries (a tool or a dialog in progress included).
+    if let Some(at) = app.gesture.press
+        && (pos - at).length() >= OPEN_DRAG
+    {
+        app.gesture.press = None;
         let studio = Studio::of(app);
         if !items(app, studio).is_empty() {
-            let centre = centre_for(pos, ctx.content_rect());
-            app.gesture.wheel = Some(Wheel { centre, studio, from: pos, armed: (pos - centre).length() < HUB });
+            let centre = centre_for(at, ctx.content_rect());
+            app.gesture.wheel = Some(Wheel { centre, studio, from: at, armed: (at - centre).length() < HUB });
+            app.gesture.used = true;
         }
     }
     let Some((centre, studio, from, armed)) = app.gesture.wheel.as_mut().map(|w| {
@@ -566,7 +593,7 @@ pub(crate) fn nav_rows(app: &mut SolveApp, ui: &mut egui::Ui, t: &Tokens) {
     } else if app.preferences.mouse_gestures.enabled {
         note(
             ui,
-            "With gestures on, the right button no longer orbits the view: press it to open the ring, then touch a tool's zone: the right-click menu is off.",
+            "With gestures on, the right button no longer orbits the view: hold it and move to open the ring, then touch a tool's zone. A plain right-click still opens the menu.",
         );
     }
 }
@@ -992,12 +1019,30 @@ mod tests {
     }
 
     #[test]
-    fn the_ring_opens_on_the_press_itself_where_the_button_went_down() {
+    fn the_ring_opens_after_four_points_with_the_button_held_where_it_went_down() {
         let mut app = gesture_app();
         drag(&mut app, &[PRESS], false);
-        assert!(is_open(&app), "no drag and no wait: the press opens it");
-        assert_eq!(app.gesture.wheel.as_ref().map(|w| w.centre), Some(PRESS));
+        assert!(!is_open(&app), "a press alone is not a gesture");
+        drag(&mut app, &[PRESS, PRESS + vec2(OPEN_DRAG - 1.0, 0.0)], false);
+        assert!(!is_open(&app), "three points is still a click");
+        let mut app = gesture_app();
+        drag(&mut app, &[PRESS, PRESS + vec2(OPEN_DRAG - 1.0, 0.0), PRESS + vec2(OPEN_DRAG, 0.0)], false);
+        assert!(is_open(&app), "four points opens it");
+        assert_eq!(app.gesture.wheel.as_ref().map(|w| w.centre), Some(PRESS), "centred where the button went down");
         assert!(app.tool.is_none() && app.dialog.is_none(), "nothing is taken inside the hub");
+    }
+
+    #[test]
+    fn a_plain_right_click_leaves_the_menu_to_the_viewport_and_a_gesture_does_not() {
+        let mut app = gesture_app();
+        drag(&mut app, &[PRESS], true);
+        assert!(!is_open(&app) && !took_press(&app), "no move: a right-click, the usual menu opens");
+        let mut app = gesture_app();
+        drag(&mut app, &[PRESS, PRESS + vec2(10.0, 0.0)], true);
+        assert!(!is_open(&app) && took_press(&app), "a gesture's release is no click, so no menu");
+        // The next press starts afresh.
+        drag(&mut app, &[PRESS], true);
+        assert!(!took_press(&app));
     }
 
     #[test]
@@ -1072,12 +1117,12 @@ mod tests {
         let mut app = gesture_app();
         app.start("sketch.create");
         assert!(app.tool.is_some() || app.dialog.is_some());
-        drag(&mut app, &[PRESS], false);
+        drag(&mut app, &[PRESS, PRESS + vec2(OPEN_DRAG + 1.0, 0.0)], false);
         assert!(is_open(&app), "a tool in the pointer doesn't keep the right button while gestures are on");
     }
 
     #[test]
-    fn the_context_and_radial_menus_are_off_only_while_gestures_are_active() {
+    fn the_radial_menu_is_off_only_while_gestures_are_active() {
         let held = |app: &mut SolveApp| {
             let ctx = egui::Context::default();
             let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
@@ -1114,8 +1159,8 @@ mod tests {
         let mut app = gesture_app();
         app.preferences.radial_context_menu = true;
         held(&mut app);
-        assert!(app.viewport.context_menu.is_none(), "gestures on: no context or radial menu");
-        assert!(is_open(&app));
+        assert!(app.viewport.context_menu.is_none(), "gestures on: no radial menu");
+        assert!(!is_open(&app), "held without moving: no ring either");
     }
 
     #[test]

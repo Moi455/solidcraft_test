@@ -34,9 +34,9 @@
   diagonal view; Shift does not request snapping when the preset already requires it to orbit.
   **Mouse gestures** (Preferences › Navigation, off by default) work with the SolidWorks mouse preset
   only (the wheel orbits, Ctrl + wheel pans) and take over the right button, which then no longer
-  orbits: press it to open, at once, a ring of tools (280 pt inside, 350 pt outside), even while a tool is
-  active, and touch a tool's zone to take it. The right-click context menu is off while gestures are
-  on. Each studio has its own
+  orbits: hold it and move the pointer 4 pt to open a ring of tools (280 pt inside, 350 pt outside), even
+  while a tool is active, and touch a tool's zone to take it. A right-click that does not move still
+  opens the usual context menu. Each studio has its own
   tools, and **Customize…** sets how many tools a studio's ring holds and in which place. Zones
   alternate between two tints, three when the number of tools is odd. The optional radial context
   menu is a separate setting, and gestures take the right button from it while they are on.
